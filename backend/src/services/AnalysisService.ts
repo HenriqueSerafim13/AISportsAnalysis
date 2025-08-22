@@ -15,7 +15,9 @@ export class AnalysisService {
   }
 
   async analyzeArticle(articleId: number): Promise<string> {
+    console.log(`Starting analysis for article ${articleId}`);
     const jobId = await JobManager.createJob('article_analysis', { articleId });
+    console.log(`Created job ${jobId} for article analysis`);
     
     // Run analysis in background
     this.runArticleAnalysis(jobId, articleId);
@@ -25,12 +27,14 @@ export class AnalysisService {
 
   private async runArticleAnalysis(jobId: string, articleId: number): Promise<void> {
     try {
+      console.log(`Running article analysis for job ${jobId}, article ${articleId}`);
       await JobManager.updateJob(jobId, { status: 'running', progress: 10 });
       
       const article = await ArticleRepository.findById(articleId);
       if (!article) {
         throw new Error('Article not found');
       }
+      console.log(`Found article: ${article.title}`);
 
       await JobManager.updateProgress(jobId, 30);
 
@@ -38,6 +42,33 @@ export class AnalysisService {
       
       await JobManager.updateProgress(jobId, 50);
 
+      console.log(`Calling Ollama with model: ${this.sportsModel}`);
+      
+      // Check if Ollama is available and model exists
+      try {
+        const isHealthy = await ollamaService.checkHealth();
+        if (!isHealthy) {
+          throw new Error('Ollama service is not available');
+        }
+        
+        const availableModels = await ollamaService.listModels();
+        console.log('Available Ollama models:', availableModels);
+        
+        if (!availableModels.includes(this.sportsModel)) {
+          console.warn(`Model ${this.sportsModel} not found, available models:`, availableModels);
+          // Try to use the first available model
+          if (availableModels.length > 0) {
+            this.sportsModel = availableModels[0];
+            console.log(`Falling back to model: ${this.sportsModel}`);
+          } else {
+            throw new Error('No Ollama models available');
+          }
+        }
+      } catch (error) {
+        console.error('Ollama health check failed:', error);
+        throw new Error(`Ollama service unavailable: ${error}`);
+      }
+      
       const response = await ollamaService.generateResponse({
         model: this.sportsModel,
         system: this.getSportsSpecialistPrompt(),
@@ -47,6 +78,10 @@ export class AnalysisService {
           max_tokens: 2000
         }
       });
+
+      console.log(`Ollama response received:`, response);
+      console.log(`Response type:`, typeof response);
+      console.log(`Response length:`, response ? response.length : 'null/undefined');
 
       await JobManager.updateProgress(jobId, 80);
 
@@ -238,7 +273,25 @@ Your role is to provide comprehensive analysis and reasoning for sports-related 
 
   private parseSportsAnalysis(response: string): SportsAnalysisResult {
     try {
-      const parsed = JSON.parse(response);
+      // Handle null/undefined response
+      if (!response || response === 'undefined' || response.trim() === '') {
+        throw new Error('Empty or undefined response from Ollama');
+      }
+
+      console.log('Attempting to parse response:', response.substring(0, 200) + '...');
+      
+      // Try to extract JSON from response if it's wrapped in text
+      let jsonContent = response.trim();
+      
+      // Look for JSON content between ```json and ``` or just { }
+      const jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/) || 
+                       response.match(/(\{[\s\S]*\})/);
+      
+      if (jsonMatch) {
+        jsonContent = jsonMatch[1];
+      }
+
+      const parsed = JSON.parse(jsonContent);
       return {
         tags: parsed.tags || [],
         entities: parsed.entities || {
@@ -253,23 +306,97 @@ Your role is to provide comprehensive analysis and reasoning for sports-related 
       };
     } catch (error) {
       console.error('Failed to parse sports analysis response:', error);
+      console.error('Raw response:', response);
+      
+      // Generate a fallback analysis based on the response text
+      return this.generateFallbackAnalysis(response);
+    }
+  }
+
+  private generateFallbackAnalysis(response: string | undefined): SportsAnalysisResult {
+    // Handle undefined/null response
+    if (!response) {
       return {
-        tags: [],
+        tags: ['sports', 'analysis_failed'],
         entities: {
           teams: [],
           players: [],
           injuries: [],
           odds_related: []
         },
-        summary: 'Analysis failed to parse properly',
+        summary: 'Analysis completed but no response received from AI model',
         score: 0.0,
         metadata: {
           confidence: 0.0,
-          key_insights: [],
-          betting_signals: []
-        }
+          key_insights: ['Analysis failed - no AI response'],
+          betting_signals: [],
+          error: 'No response from Ollama'
+        } as any
       };
     }
+
+    // Extract basic information from the response text
+    const tags = this.extractTagsFromText(response);
+    const entities = this.extractEntitiesFromText(response);
+    
+    return {
+      tags: tags,
+      entities: entities,
+      summary: response.substring(0, 500) + '...',
+      score: 0.5,
+      metadata: {
+        confidence: 0.3,
+        key_insights: ['Analysis completed with text fallback'],
+        betting_signals: [],
+        fallback: true
+      } as any
+    };
+  }
+
+  private extractTagsFromText(text: string | undefined): string[] {
+    if (!text) return ['sports', 'analysis_failed'];
+    
+    const tags = [];
+    const sportKeywords = ['football', 'soccer', 'basketball', 'tennis', 'baseball', 'hockey', 'golf', 'racing'];
+    const lowerText = text.toLowerCase();
+    
+    for (const keyword of sportKeywords) {
+      if (lowerText.includes(keyword)) {
+        tags.push(keyword);
+      }
+    }
+    
+    return tags.length > 0 ? tags.slice(0, 5) : ['sports', 'general']; // Limit to 5 tags
+  }
+
+  private extractEntitiesFromText(text: string | undefined): any {
+    if (!text) {
+      return {
+        teams: [],
+        players: [],
+        injuries: [],
+        odds_related: []
+      };
+    }
+    
+    // Simple entity extraction - look for capitalized words that might be teams/players
+    const words = text.split(/\s+/);
+    const entities = {
+      teams: [],
+      players: [],
+      injuries: [],
+      odds_related: []
+    };
+    
+    for (const word of words) {
+      if (word.length > 2 && /^[A-Z][a-z]+/.test(word)) {
+        if ((entities.teams as string[]).length < 3) {
+          (entities.teams as string[]).push(word);
+        }
+      }
+    }
+    
+    return entities;
   }
 
   private parseReasoningAnalysis(response: string): ReasoningAnalysisResult {

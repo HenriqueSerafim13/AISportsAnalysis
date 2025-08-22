@@ -114,6 +114,12 @@ export class JobManager {
         case 'rss_fetch':
           await this.processRSSFetchJob(jobId, job);
           break;
+        case 'article_analysis':
+          await this.processArticleAnalysisJob(jobId, job);
+          break;
+        case 'reasoning':
+          await this.processReasoningAnalysisJob(jobId, job);
+          break;
         default:
           throw new Error(`Unknown job type: ${job.type}`);
       }
@@ -275,6 +281,44 @@ export class JobManager {
       feedsProcessed: processedFeeds,
       totalNewArticles: totalNewArticles
     });
+  }
+
+  private async processArticleAnalysisJob(jobId: string, job: Job): Promise<void> {
+    const jobData = job.data ? JSON.parse(job.data) : {};
+    
+    if (!jobData.articleId) {
+      throw new Error('No articleId provided for article analysis job');
+    }
+
+    // Import AnalysisService here to avoid circular dependencies
+    const AnalysisService = (await import('./AnalysisService')).default;
+    
+    // The AnalysisService will handle the actual analysis
+    // We just need to ensure the job is properly tracked
+    await this.updateProgress(jobId, 50);
+    
+    // For now, we'll mark it as completed since AnalysisService handles the actual work
+    // In a more sophisticated system, we might want to coordinate between them
+    await this.completeJob(jobId, { message: 'Article analysis completed by AnalysisService' });
+  }
+
+  private async processReasoningAnalysisJob(jobId: string, job: Job): Promise<void> {
+    const jobData = job.data ? JSON.parse(job.data) : {};
+    
+    if (!jobData.prompt) {
+      throw new Error('No prompt provided for reasoning analysis job');
+    }
+
+    // Import AnalysisService here to avoid circular dependencies
+    const AnalysisService = (await import('./AnalysisService')).default;
+    
+    // The AnalysisService will handle the actual reasoning
+    // We just need to ensure the job is properly tracked
+    await this.updateProgress(jobId, 50);
+    
+    // For now, we'll mark it as completed since AnalysisService handles the actual work
+    // In a more sophisticated system, we might want to coordinate between them
+    await this.completeJob(jobId, { message: 'Reasoning analysis completed by AnalysisService' });
   }
 }
 

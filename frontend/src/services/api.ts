@@ -66,6 +66,11 @@ export const articlesApi = {
     return response.data.data!;
   },
 
+  getWithInsights: async (id: number): Promise<Article & { insights?: any[] }> => {
+    const response = await api.get<ApiResponse<Article & { insights?: any[] }>>(`/api/articles/${id}/insights`);
+    return response.data.data!;
+  },
+
   delete: async (id: number): Promise<void> => {
     await api.delete<ApiResponse>(`/api/articles/${id}`);
   },

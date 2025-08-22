@@ -10,18 +10,60 @@ export class OllamaService {
 
   async generateResponse(request: OllamaRequest): Promise<string> {
     try {
-      const response: AxiosResponse<OllamaResponse> = await axios.post(
+      console.log(`Sending request to Ollama at ${this.baseUrl}/api/generate`);
+      console.log('Request payload:', JSON.stringify(request, null, 2));
+      
+      // Always use streaming for consistent behavior
+      const response = await axios.post(
         `${this.baseUrl}/api/generate`,
-        request,
+        { ...request, stream: true },
         {
           headers: {
             'Content-Type': 'application/json',
           },
+          responseType: 'stream',
           timeout: 300000, // 5 minutes timeout
         }
       );
 
-      return response.data.response;
+      console.log('Ollama response status:', response.status);
+      
+      return new Promise((resolve, reject) => {
+        let fullResponse = '';
+        
+        response.data.on('data', (chunk: Buffer) => {
+          const lines = chunk.toString().split('\n');
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                const data: OllamaResponse = JSON.parse(line);
+                if (data.response) {
+                  fullResponse += data.response;
+                }
+                
+                if (data.done) {
+                  console.log('Final response received:', fullResponse.substring(0, 200) + '...');
+                  resolve(fullResponse);
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse Ollama response chunk:', parseError);
+              }
+            }
+          }
+        });
+
+        response.data.on('end', () => {
+          if (!fullResponse) {
+            reject(new Error('No response received from Ollama'));
+          }
+        });
+
+        response.data.on('error', (error: Error) => {
+          console.error('Ollama stream error:', error);
+          reject(error);
+        });
+      });
     } catch (error) {
       console.error('Ollama API error:', error);
       throw new Error(`Failed to generate response: ${error}`);

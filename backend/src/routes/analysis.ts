@@ -18,6 +18,7 @@ const reasoningAnalysisSchema = z.object({
 // POST /api/analysis/article/:id - Analyze a specific article
 router.post('/article/:id', async (req: Request, res: Response<ApiResponse>) => {
   try {
+    console.log(`Received analysis request for article ${req.params.id}`);
     const articleId = parseInt(req.params.id);
     if (isNaN(articleId)) {
       return res.status(400).json({
@@ -26,7 +27,9 @@ router.post('/article/:id', async (req: Request, res: Response<ApiResponse>) => 
       });
     }
     
+    console.log(`Starting analysis for article ${articleId}`);
     const jobId = await AnalysisService.analyzeArticle(articleId);
+    console.log(`Analysis started with job ID: ${jobId}`);
     
     res.json({
       success: true,

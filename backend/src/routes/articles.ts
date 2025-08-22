@@ -98,6 +98,47 @@ router.get('/:id', async (req: Request, res: Response<ApiResponse>) => {
   }
 });
 
+// GET /api/articles/:id/insights - Get article with insights
+router.get('/:id/insights', async (req: Request, res: Response<ApiResponse>) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    if (isNaN(articleId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid article ID'
+      });
+    }
+    
+    const article = await ArticleRepository.findById(articleId);
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        error: 'Article not found'
+      });
+    }
+
+    // Import InsightRepository here to avoid circular dependencies
+    const InsightRepository = (await import('../repositories/InsightRepository')).default;
+    const insights = await InsightRepository.findByArticleId(articleId);
+    
+    const articleWithInsights = {
+      ...article,
+      insights: insights
+    };
+    
+    res.json({
+      success: true,
+      data: articleWithInsights
+    });
+  } catch (error) {
+    console.error('Failed to fetch article with insights:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch article with insights'
+    });
+  }
+});
+
 // DELETE /api/articles/bulk - Bulk delete articles
 router.delete('/bulk', async (req: Request, res: Response<ApiResponse>) => {
   try {

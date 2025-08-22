@@ -31,6 +31,7 @@ import {
   Divider,
   Stack,
   Badge,
+  CircularProgress,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -62,6 +63,7 @@ const Articles: React.FC = () => {
   const [selectedArticles, setSelectedArticles] = useState<Set<number>>(new Set());
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
   const [openBulkDeleteDialog, setOpenBulkDeleteDialog] = useState(false);
   const [bulkDeleteType, setBulkDeleteType] = useState<'selected' | 'older' | 'search'>('selected');
   const [olderThanDays, setOlderThanDays] = useState(30);
@@ -84,6 +86,13 @@ const Articles: React.FC = () => {
   // Fetch feeds for filter dropdown
   const { data: feeds } = useQuery(['feeds'], feedsApi.getAll);
 
+  // Fetch detailed article with insights when dialog is open
+  const { data: articleDetails, isLoading: isLoadingDetails } = useQuery(
+    ['article-details', selectedArticleId],
+    () => selectedArticleId ? articlesApi.getWithInsights(selectedArticleId) : null,
+    { enabled: !!selectedArticleId && openDialog }
+  );
+
   // Mutations
   const deleteMutation = useMutation(articlesApi.delete, {
     onSuccess: () => {
@@ -101,8 +110,13 @@ const Articles: React.FC = () => {
   });
 
   const analyzeMutation = useMutation(analysisApi.analyzeArticle, {
-    onSuccess: () => {
+    onSuccess: (jobId) => {
       queryClient.invalidateQueries('articles');
+      queryClient.invalidateQueries('article-details');
+      console.log(`Analysis started for job: ${jobId}`);
+    },
+    onError: (error) => {
+      console.error('Analysis failed:', error);
     },
   });
 
@@ -133,12 +147,14 @@ const Articles: React.FC = () => {
 
   const handleOpenArticle = (article: Article) => {
     setSelectedArticle(article);
+    setSelectedArticleId(article.id!);
     setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setSelectedArticle(null);
+    setSelectedArticleId(null);
   };
 
   const handleSelectArticle = (articleId: number, checked: boolean) => {
@@ -351,8 +367,15 @@ const Articles: React.FC = () => {
                     size="small"
                     onClick={() => handleAnalyze(article.id!)}
                     disabled={analyzeMutation.isLoading}
+                    color={analyzeMutation.isLoading ? "primary" : "default"}
                   >
-                    <AnalysisIcon />
+                    {analyzeMutation.isLoading ? (
+                      <Box sx={{ width: 16, height: 16 }}>
+                        <CircularProgress size={16} />
+                      </Box>
+                    ) : (
+                      <AnalysisIcon />
+                    )}
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="View Details">
@@ -409,56 +432,166 @@ const Articles: React.FC = () => {
       )}
 
       {/* Article Detail Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="lg" fullWidth>
         <DialogTitle>
-          {selectedArticle?.title}
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Typography variant="h6" sx={{ flex: 1, pr: 2 }}>
+              {selectedArticle?.title}
+            </Typography>
+            {selectedArticle && (
+              <Button
+                variant="contained"
+                startIcon={<AnalysisIcon />}
+                onClick={() => handleAnalyze(selectedArticle.id!)}
+                disabled={analyzeMutation.isLoading}
+                size="small"
+              >
+                {analyzeMutation.isLoading ? 'Analyzing...' : 'Analyze'}
+              </Button>
+            )}
+          </Box>
         </DialogTitle>
         <DialogContent>
-          {selectedArticle && (
-            <Box>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                {selectedArticle.feed_title} • {format(new Date(selectedArticle.published_at || ''), 'MMM dd, yyyy HH:mm')}
-              </Typography>
-              {selectedArticle.author && (
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  By: {selectedArticle.author}
-                </Typography>
-              )}
-              <Typography variant="body1" paragraph>
-                {selectedArticle.summary}
-              </Typography>
-              {selectedArticle.content && (
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {selectedArticle.content}
-                </Typography>
-              )}
-              <Box mt={2}>
-                <Button
-                  variant="outlined"
-                  href={selectedArticle.link}
-                  target="_blank"
-                  startIcon={<OpenIcon />}
-                >
-                  Read Original
-                </Button>
-              </Box>
+          {isLoadingDetails ? (
+            <Box display="flex" justifyContent="center" p={3}>
+              <CircularProgress />
             </Box>
+          ) : (
+            selectedArticle && (
+              <Box>
+                {/* Article Metadata */}
+                <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    {selectedArticle.feed_title} • {format(new Date(selectedArticle.published_at || ''), 'MMM dd, yyyy HH:mm')}
+                  </Typography>
+                  {selectedArticle.author && (
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      By: {selectedArticle.author}
+                    </Typography>
+                  )}
+                  <Button
+                    variant="outlined"
+                    href={selectedArticle.link}
+                    target="_blank"
+                    startIcon={<OpenIcon />}
+                    size="small"
+                    sx={{ mt: 1 }}
+                  >
+                    Read Original
+                  </Button>
+                </Paper>
+
+                {/* Article Content */}
+                <Box mb={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Content
+                  </Typography>
+                  <Typography variant="body1" paragraph sx={{ fontWeight: 500 }}>
+                    {selectedArticle.summary}
+                  </Typography>
+                  {selectedArticle.content && selectedArticle.content !== selectedArticle.summary && (
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                      {selectedArticle.content}
+                    </Typography>
+                  )}
+                </Box>
+
+                {/* AI Analysis Results */}
+                {articleDetails?.insights && articleDetails.insights.length > 0 && (
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      AI Analysis Results
+                    </Typography>
+                    {articleDetails.insights.map((insight: any, index: number) => (
+                      <Paper key={index} sx={{ p: 2, mb: 2 }}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                          <Chip 
+                            label={insight.agent === 'sports_specialist' ? 'Sports Specialist' : insight.agent} 
+                            color="primary" 
+                            size="small" 
+                          />
+                          <Typography variant="caption" color="textSecondary">
+                            {format(new Date(insight.created_at), 'MMM dd, yyyy HH:mm')}
+                          </Typography>
+                        </Box>
+                        
+                        <Typography variant="body2" paragraph>
+                          {insight.summary}
+                        </Typography>
+
+                        {/* Tags */}
+                        {insight.tags && (
+                          <Box mb={2}>
+                            <Typography variant="caption" color="textSecondary">Tags:</Typography>
+                            <Box display="flex" gap={1} flexWrap="wrap" mt={0.5}>
+                              {JSON.parse(insight.tags || '[]').map((tag: string, tagIndex: number) => (
+                                <Chip key={tagIndex} label={tag} size="small" variant="outlined" />
+                              ))}
+                            </Box>
+                          </Box>
+                        )}
+
+                        {/* Entities */}
+                        {insight.entities && (
+                          <Box mb={2}>
+                            <Typography variant="caption" color="textSecondary">Entities:</Typography>
+                            <Box mt={0.5}>
+                              {(() => {
+                                try {
+                                  const entities = JSON.parse(insight.entities || '{}');
+                                  return Object.entries(entities).map(([key, values]: [string, any]) => (
+                                    values && values.length > 0 && (
+                                      <Box key={key} display="flex" gap={1} flexWrap="wrap" mb={1}>
+                                        <Typography variant="caption" sx={{ minWidth: 60, textTransform: 'capitalize' }}>
+                                          {key.replace('_', ' ')}:
+                                        </Typography>
+                                        {values.map((value: string, valueIndex: number) => (
+                                          <Chip key={valueIndex} label={value} size="small" color="secondary" variant="outlined" />
+                                        ))}
+                                      </Box>
+                                    )
+                                  ));
+                                } catch {
+                                  return <Typography variant="caption" color="textSecondary">Invalid entities data</Typography>;
+                                }
+                              })()}
+                            </Box>
+                          </Box>
+                        )}
+
+                        {/* Confidence Score */}
+                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                          <Typography variant="caption" color="textSecondary">
+                            Confidence Score: {Math.round((insight.score || 0) * 100)}%
+                          </Typography>
+                          <LinearProgress 
+                            variant="determinate" 
+                            value={(insight.score || 0) * 100} 
+                            sx={{ width: 100, height: 4 }}
+                          />
+                        </Box>
+                      </Paper>
+                    ))}
+                  </Box>
+                )}
+
+                {/* No Analysis Message */}
+                {(!articleDetails?.insights || articleDetails.insights.length === 0) && (
+                  <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      No AI analysis available for this article yet.
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      Click "Analyze" to start AI analysis of this article.
+                    </Typography>
+                  </Paper>
+                )}
+              </Box>
+            )
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Close</Button>
-          {selectedArticle && (
-            <Button
-              variant="contained"
-              startIcon={<AnalysisIcon />}
-              onClick={() => {
-                handleAnalyze(selectedArticle.id!);
-                handleCloseDialog();
-              }}
-            >
-              Analyze
-            </Button>
-          )}
         </DialogActions>
       </Dialog>
 
@@ -520,7 +653,10 @@ const Articles: React.FC = () => {
       {/* Error Alerts */}
       {(deleteMutation.error || analyzeMutation.error || bulkDeleteMutation.error) && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          An error occurred. Please try again.
+          {deleteMutation.error && 'Failed to delete article. '}
+          {analyzeMutation.error && 'Failed to analyze article. '}
+          {bulkDeleteMutation.error && 'Failed to bulk delete articles. '}
+          Please try again.
         </Alert>
       )}
 
@@ -528,6 +664,12 @@ const Articles: React.FC = () => {
       {bulkDeleteMutation.isSuccess && (
         <Alert severity="success" sx={{ mt: 2 }}>
           Successfully deleted {bulkDeleteMutation.data?.deletedCount} articles.
+        </Alert>
+      )}
+
+      {analyzeMutation.isSuccess && (
+        <Alert severity="success" sx={{ mt: 2 }}>
+          Article analysis started successfully! Check the jobs page for progress.
         </Alert>
       )}
     </Box>
