@@ -14,6 +14,7 @@ export interface Article {
   feed_id: number;
   title: string;
   link: string;
+  link_timestamp_hash: string;
   content?: string;
   summary?: string;
   author?: string;

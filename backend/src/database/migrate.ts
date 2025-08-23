@@ -1,4 +1,5 @@
 import DatabaseManager from './index';
+import migrateRecreateArticlesTable from './migrate-recreate-articles-table';
 
 async function migrate() {
   try {
@@ -6,6 +7,9 @@ async function migrate() {
     
     // The database is automatically initialized when DatabaseManager is instantiated
     const dbManager = DatabaseManager.getInstance();
+    
+    // Run the articles table migration
+    await migrateRecreateArticlesTable();
     
     console.log('Database migration completed successfully');
     process.exit(0);

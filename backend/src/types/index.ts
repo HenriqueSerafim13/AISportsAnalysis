@@ -14,6 +14,7 @@ export interface Article {
   feed_id: number;
   title: string;
   link: string;
+  link_timestamp_hash: string;
   content?: string;
   summary?: string;
   author?: string;
@@ -121,4 +122,17 @@ export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   message?: string;
+}
+
+// Utility function to generate a unique hash for link + timestamp
+export function generateLinkTimestampHash(link: string, timestamp: string): string {
+  const combined = `${link}|${timestamp}`;
+  // Simple hash function - in production you might want to use crypto.createHash
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36);
 }

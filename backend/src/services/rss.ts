@@ -2,7 +2,7 @@ import Parser from "rss-parser";
 import fetch from "node-fetch";
 import { decode } from "iconv-lite";
 import chardet from "chardet";
-import { Feed, Article } from "../types";
+import { Feed, Article, generateLinkTimestampHash } from "../types";
 
 // Lightweight cleaner (no encoding hacks here anymore)
 function cleanText(text: string): string {
@@ -78,14 +78,16 @@ export class RSSService {
           console.log(`Article ${index + 1} - Cleaned: "${cleanedTitle.substring(0, 50)}..."`);
         }
 
+        const publishedAt = item.pubDate || item.isoDate || new Date().toISOString();
         return {
           feed_id: 0,
           title: cleanedTitle,
           link: item.link || "",
+          link_timestamp_hash: generateLinkTimestampHash(item.link || "", publishedAt),
           content: cleanedContent,
           summary: cleanedSummary,
           author: cleanedAuthor,
-          published_at: item.pubDate || item.isoDate || new Date().toISOString(),
+          published_at: publishedAt,
           raw_json: JSON.stringify(item),
         };
       });

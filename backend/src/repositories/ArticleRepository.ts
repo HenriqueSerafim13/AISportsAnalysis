@@ -11,14 +11,15 @@ export class ArticleRepository {
 
   async create(article: Article): Promise<number> {
     const stmt = this.db.prepare(`
-      INSERT INTO articles (feed_id, title, link, content, summary, author, published_at, raw_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO articles (feed_id, title, link, link_timestamp_hash, content, summary, author, published_at, raw_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const result = stmt.run(
       article.feed_id,
       article.title,
       article.link,
+      article.link_timestamp_hash,
       article.content,
       article.summary,
       article.author,
@@ -31,8 +32,8 @@ export class ArticleRepository {
 
   async createMany(articles: Article[]): Promise<number[]> {
     const stmt = this.db.prepare(`
-      INSERT INTO articles (feed_id, title, link, content, summary, author, published_at, raw_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO articles (feed_id, title, link, link_timestamp_hash, content, summary, author, published_at, raw_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const transaction = this.db.transaction((articles: Article[]) => {
@@ -42,6 +43,7 @@ export class ArticleRepository {
           article.feed_id,
           article.title,
           article.link,
+          article.link_timestamp_hash,
           article.content,
           article.summary,
           article.author,
@@ -99,6 +101,15 @@ export class ArticleRepository {
     `);
     
     const result = stmt.get(link) as Article | undefined;
+    return result || null;
+  }
+
+  async findByLinkTimestampHash(hash: string): Promise<Article | null> {
+    const stmt = this.db.prepare(`
+      SELECT * FROM articles WHERE link_timestamp_hash = ?
+    `);
+    
+    const result = stmt.get(hash) as Article | undefined;
     return result || null;
   }
 
