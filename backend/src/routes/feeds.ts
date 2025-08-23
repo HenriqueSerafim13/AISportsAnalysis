@@ -127,7 +127,11 @@ router.put('/:id', async (req: Request, res: Response<ApiResponse>) => {
       });
     }
     
+    console.log('Update feed request body:', req.body);
+    
     const validatedData = updateFeedSchema.parse(req.body);
+    
+    console.log('Validated data:', validatedData);
     
     const feed = await FeedRepository.findById(feedId);
     if (!feed) {
@@ -154,6 +158,7 @@ router.put('/:id', async (req: Request, res: Response<ApiResponse>) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Validation error details:', error.errors);
       return res.status(400).json({
         success: false,
         error: 'Validation error'

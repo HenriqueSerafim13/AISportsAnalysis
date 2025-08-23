@@ -24,7 +24,8 @@ export class FeedRepository {
       SELECT * FROM feeds ORDER BY created_at DESC
     `);
     
-    return stmt.all() as Feed[];
+    const results = stmt.all() as any[];
+    return results.map(this.transformFeedData);
   }
 
   async findById(id: number): Promise<Feed | null> {
@@ -32,8 +33,8 @@ export class FeedRepository {
       SELECT * FROM feeds WHERE id = ?
     `);
     
-    const result = stmt.get(id) as Feed | undefined;
-    return result || null;
+    const result = stmt.get(id) as any;
+    return result ? this.transformFeedData(result) : null;
   }
 
   async findByUrl(url: string): Promise<Feed | null> {
@@ -41,8 +42,8 @@ export class FeedRepository {
       SELECT * FROM feeds WHERE url = ?
     `);
     
-    const result = stmt.get(url) as Feed | undefined;
-    return result || null;
+    const result = stmt.get(url) as any;
+    return result ? this.transformFeedData(result) : null;
   }
 
   async update(id: number, feed: Partial<Feed>): Promise<boolean> {
@@ -89,7 +90,15 @@ export class FeedRepository {
       SELECT * FROM feeds WHERE enabled = 1 ORDER BY last_fetched ASC NULLS FIRST
     `);
     
-    return stmt.all() as Feed[];
+    const results = stmt.all() as any[];
+    return results.map(this.transformFeedData);
+  }
+
+  private transformFeedData(data: any): Feed {
+    return {
+      ...data,
+      enabled: Boolean(data.enabled)
+    };
   }
 }
 

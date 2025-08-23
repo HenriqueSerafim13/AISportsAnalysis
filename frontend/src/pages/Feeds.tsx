@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -32,6 +32,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { format } from 'date-fns';
 import { feedsApi } from '../services/api';
 import { Feed } from '../types';
+import sseService from '../services/sse';
 
 const Feeds: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
@@ -71,13 +72,13 @@ const Feeds: React.FC = () => {
 
   const fetchMutation = useMutation(feedsApi.fetch, {
     onSuccess: () => {
-      queryClient.invalidateQueries('feeds');
+      // Don't invalidate immediately - wait for job completion via SSE
     },
   });
 
   const fetchAllMutation = useMutation(feedsApi.fetchAll, {
     onSuccess: () => {
-      queryClient.invalidateQueries('feeds');
+      // Don't invalidate immediately - wait for job completion via SSE
     },
   });
 
@@ -115,7 +116,9 @@ const Feeds: React.FC = () => {
 
   const handleSubmit = () => {
     if (editingFeed) {
-      updateMutation.mutate({ id: editingFeed.id!, data: formData });
+      // Only send fields that are allowed to be updated (exclude url)
+      const { url, ...updateData } = formData;
+      updateMutation.mutate({ id: editingFeed.id!, data: updateData });
     } else {
       createMutation.mutate(formData);
     }
@@ -136,6 +139,25 @@ const Feeds: React.FC = () => {
       fetchAllMutation.mutate();
     }
   };
+
+  // Connect to SSE and listen for job completion events
+  useEffect(() => {
+    // Connect to SSE service
+    sseService.connect();
+
+    const unsubscribe = sseService.subscribe('job.updated', (event) => {
+      if (event.data?.status === 'completed' && event.data?.type === 'rss_fetch') {
+        // Refresh feeds data when RSS fetch job completes
+        queryClient.invalidateQueries('feeds');
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      unsubscribe();
+      sseService.disconnect();
+    };
+  }, [queryClient]);
 
   return (
     <Box>

@@ -39,9 +39,12 @@ export class JobManager {
     const values = [...fields.map(field => (updates as any)[field]), jobId];
     stmt.run(...values);
     
+    // Get the full job to include the type in the broadcast
+    const job = await this.getJob(jobId);
+    
     this.broadcastEvent({
       type: 'job.updated',
-      data: { jobId, ...updates }
+      data: { jobId, ...updates, type: job?.type }
     });
   }
 
@@ -170,11 +173,11 @@ export class JobManager {
     
     await this.updateProgress(jobId, 60);
     
-    // Update feed info
-    await FeedRepository.update(feed.id!, {
-      title: feedData.title,
-      description: feedData.description
-    });
+    // Don't update feed info - keep user's custom title and description
+    // await FeedRepository.update(feed.id!, {
+    //   title: feedData.title,
+    //   description: feedData.description
+    // });
     
     // Save new articles
     const newArticles = [];
@@ -235,11 +238,11 @@ export class JobManager {
       try {
         const { feed: feedData, articles } = await RSSService.fetchFeed(feed.url);
         
-        // Update feed info
-        await FeedRepository.update(feed.id!, {
-          title: feedData.title,
-          description: feedData.description
-        });
+        // Don't update feed info - keep user's custom title and description
+        // await FeedRepository.update(feed.id!, {
+        //   title: feedData.title,
+        //   description: feedData.description
+        // });
         
         // Save new articles
         const newArticles = [];

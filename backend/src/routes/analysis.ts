@@ -64,8 +64,7 @@ router.post('/reasoning', async (req: Request, res: Response<ApiResponse>) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
-        error: 'Validation error',
-        details: error.errors
+        error: 'Validation error'
       });
     }
     
@@ -118,8 +117,7 @@ router.post('/reasoning/stream', async (req: Request, res: Response<ApiResponse>
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
-        error: 'Validation error',
-        details: error.errors
+        error: 'Validation error'
       });
     }
     
