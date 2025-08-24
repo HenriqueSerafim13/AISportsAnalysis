@@ -32,6 +32,14 @@ import {
   Stack,
   Badge,
   CircularProgress,
+  useTheme,
+  useMediaQuery,
+  Collapse,
+  CardHeader,
+  Avatar,
+  CardMedia,
+  Fade,
+  Zoom,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -43,6 +51,11 @@ import {
   Refresh as RefreshIcon,
   DeleteSweep as BulkDeleteIcon,
   Settings as SettingsIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  RssFeed as FeedIcon,
+  Person as PersonIcon,
+  Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { format } from 'date-fns';
@@ -50,10 +63,15 @@ import { articlesApi, analysisApi, feedsApi } from '../services/api';
 import { Article, Feed } from '../types';
 
 const Articles: React.FC = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
+
   // Get saved limit from localStorage or default to 12
   const getSavedLimit = () => {
     const saved = localStorage.getItem('articlesPerPage');
-    return saved ? parseInt(saved) : 12;
+    return saved ? parseInt(saved) : (isMobile ? 6 : 12);
   };
 
   const [page, setPage] = useState(1);
@@ -67,6 +85,18 @@ const Articles: React.FC = () => {
   const [openBulkDeleteDialog, setOpenBulkDeleteDialog] = useState(false);
   const [bulkDeleteType, setBulkDeleteType] = useState<'selected' | 'older' | 'search'>('selected');
   const [olderThanDays, setOlderThanDays] = useState(30);
+  const [showFilters, setShowFilters] = useState(!isMobile);
+  
+  // Enhanced filtering options
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  const [customDateRange, setCustomDateRange] = useState<{start: string, end: string}>({
+    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
+  const [authorFilter, setAuthorFilter] = useState('');
+  const [hasAnalysis, setHasAnalysis] = useState<'all' | 'yes' | 'no'>('all');
+  const [sortBy, setSortBy] = useState<'published' | 'title' | 'feed' | 'author'>('published');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const queryClient = useQueryClient();
   const offset = (page - 1) * limit;
@@ -204,6 +234,49 @@ const Articles: React.FC = () => {
   const handleClearFilters = () => {
     setSearch('');
     setSelectedFeedId('');
+    setDateFilter('all');
+    setCustomDateRange({
+      start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      end: new Date().toISOString().split('T')[0]
+    });
+    setAuthorFilter('');
+    setHasAnalysis('all');
+    setSortBy('published');
+    setSortOrder('desc');
+    setPage(1);
+  };
+
+  // Enhanced filter handlers
+  const handleDateFilterChange = (event: any) => {
+    setDateFilter(event.target.value);
+    setPage(1);
+  };
+
+  const handleCustomDateChange = (field: 'start' | 'end') => (event: any) => {
+    setCustomDateRange(prev => ({
+      ...prev,
+      [field]: event.target.value
+    }));
+    setPage(1);
+  };
+
+  const handleAuthorFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setAuthorFilter(event.target.value);
+    setPage(1);
+  };
+
+  const handleAnalysisFilterChange = (event: any) => {
+    setHasAnalysis(event.target.value);
+    setPage(1);
+  };
+
+  const handleSortChange = (event: any) => {
+    setSortBy(event.target.value);
+    setPage(1);
+  };
+
+  const handleSortOrderChange = () => {
+    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
     setPage(1);
   };
 
@@ -212,119 +285,560 @@ const Articles: React.FC = () => {
 
   const isSomeSelected = articlesData?.articles?.some(article => selectedArticles.has(article.id!));
 
+  // Helper function to truncate text
+  const truncateText = (text: string, maxLength: number) => {
+    if (!text) return '';
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  };
+
+  // Get grid sizes based on screen size
+  const getGridSize = () => {
+    if (isMobile) return 12;
+    if (isTablet) return 6;
+    if (isDesktop) return 4;
+    return 3;
+  };
+
   return (
-    <Box>
-      {/* Header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4">
-            Articles
-            {selectedArticles.size > 0 && (
-              <Badge badgeContent={selectedArticles.size} color="primary" sx={{ ml: 2 }}>
-                <Chip label="Selected" color="primary" variant="outlined" />
-              </Badge>
+    <Box sx={{ minHeight: '100vh', pb: 4 }}>
+      {/* Minimalist Header */}
+      <Paper 
+        sx={{ 
+          p: { xs: 2, sm: 3 }, 
+          mb: 3,
+          borderRadius: 2,
+          bgcolor: 'background.paper',
+          border: `1px solid ${theme.palette.divider}`,
+          boxShadow: theme.shadows[1],
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '3px',
+            bgcolor: 'primary.main',
+          }
+        }}
+      >
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between', 
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            gap: { xs: 2, sm: 0 }
+          }}
+        >
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+              <Typography 
+                variant={isMobile ? "h5" : "h4"}
+                sx={{ 
+                  fontWeight: 600,
+                  color: 'text.primary'
+                }}
+              >
+                Articles
+              </Typography>
+              {selectedArticles.size > 0 && (
+                <Badge badgeContent={selectedArticles.size} color="error">
+                  <Chip 
+                    label={`${selectedArticles.size} Selected`} 
+                    color="error" 
+                    variant="filled"
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ 
+                      fontWeight: 500
+                    }}
+                  />
+                </Badge>
+              )}
+            </Box>
+            {articlesData?.pagination && (
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  mt: 0.5,
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
+                  color: 'text.secondary'
+                }}
+              >
+                {limit === -1 
+                  ? `Showing all ${articlesData.pagination.total} articles`
+                  : `Showing ${offset + 1}-${Math.min(offset + limit, articlesData.pagination.total)} of ${articlesData.pagination.total} articles`
+                }
+              </Typography>
             )}
-          </Typography>
-          {articlesData?.pagination && (
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-              {limit === -1 
-                ? `Showing all ${articlesData.pagination.total} articles`
-                : `Showing ${offset + 1}-${Math.min(offset + limit, articlesData.pagination.total)} of ${articlesData.pagination.total} articles`
-              }
-            </Typography>
-          )}
-        </Box>
-        <Box display="flex" alignItems="center" gap={2}>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={() => queryClient.invalidateQueries('articles')}
-          >
-            Refresh
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Filters */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-          <TextField
-            placeholder="Search articles..."
-            value={search}
-            onChange={handleSearch}
-            InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-            }}
-            size="small"
-            sx={{ minWidth: 200 }}
-          />
+          </Box>
           
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Feed Filter</InputLabel>
-            <Select
-              value={selectedFeedId}
-              label="Feed Filter"
-              onChange={handleFeedFilter}
-            >
-              <MenuItem value="">All Feeds</MenuItem>
-              {feeds?.map((feed) => (
-                <MenuItem key={feed.id} value={feed.id}>
-                  {feed.title}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Per Page</InputLabel>
-            <Select
-              value={limit}
-              label="Per Page"
-              onChange={handleLimitChange}
-            >
-              <MenuItem value={6}>6 articles</MenuItem>
-              <MenuItem value={12}>12 articles</MenuItem>
-              <MenuItem value={24}>24 articles</MenuItem>
-              <MenuItem value={50}>50 articles</MenuItem>
-              <MenuItem value={100}>100 articles</MenuItem>
-              <MenuItem value={-1}>Show All</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Button
-            variant="outlined"
-            startIcon={<ClearIcon />}
-            onClick={handleClearFilters}
-            size="small"
+          <Box 
+            display="flex" 
+            alignItems="center" 
+            gap={1.5}
+            sx={{ 
+              flexDirection: { xs: 'row', sm: 'row' },
+              width: { xs: '100%', sm: 'auto' }
+            }}
           >
-            Clear Filters
-          </Button>
-
-          {selectedArticles.size > 0 && (
+            {/* Minimalist Refresh Button */}
             <Button
-              variant="contained"
-              color="error"
-              startIcon={<BulkDeleteIcon />}
-              onClick={() => setOpenBulkDeleteDialog(true)}
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => queryClient.invalidateQueries('articles')}
+              size={isMobile ? "small" : "medium"}
+              sx={{ 
+                minWidth: { xs: 'auto', sm: 'auto' },
+                px: { xs: 2, sm: 3 },
+                py: { xs: 1, sm: 1.5 },
+                borderRadius: 2,
+                fontWeight: 500,
+                '&:hover': {
+                  transform: 'translateY(-1px)',
+                  boxShadow: theme.shadows[2],
+                },
+                transition: 'all 0.2s ease-in-out'
+              }}
             >
-              Delete Selected ({selectedArticles.size})
+              Refresh
             </Button>
-          )}
-        </Stack>
+            
+            {/* Mobile Filters Toggle */}
+            {isMobile && (
+              <Button
+                variant="outlined"
+                startIcon={showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                onClick={() => setShowFilters(!showFilters)}
+                size="small"
+                sx={{ 
+                  borderRadius: 2
+                }}
+              >
+                {showFilters ? 'Hide' : 'Show'} Filters
+              </Button>
+            )}
+          </Box>
+        </Box>
       </Paper>
+
+      {/* Minimalist Search, Filter and Refresh Bar */}
+      <Collapse in={showFilters}>
+        <Paper 
+          sx={{ 
+            p: { xs: 2, sm: 3 }, 
+            mb: 3,
+            borderRadius: 2,
+            boxShadow: theme.shadows[1],
+            bgcolor: 'background.paper',
+            border: `1px solid ${theme.palette.divider}`,
+            position: 'relative',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '2px',
+              bgcolor: 'primary.main',
+            }
+          }}
+        >
+          {/* Section Header */}
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 1, 
+              mb: { xs: 2, sm: 3 },
+              pb: 1,
+              borderBottom: `1px solid ${theme.palette.divider}`
+            }}
+          >
+            <FilterIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                fontWeight: 500, 
+                color: 'text.primary',
+                fontSize: { xs: '0.9rem', sm: '1rem' }
+              }}
+            >
+              Search & Filters
+            </Typography>
+            <Chip 
+              label={`${articlesData?.pagination?.total || 0} articles`} 
+              size="small" 
+              variant="outlined"
+              sx={{ 
+                ml: 'auto',
+                fontSize: '0.75rem'
+              }}
+            />
+          </Box>
+
+                     <Box 
+             sx={{ 
+               display: 'grid',
+               gridTemplateColumns: { 
+                 xs: '1fr', 
+                 sm: 'repeat(auto-fit, minmax(200px, 1fr))',
+                 md: 'repeat(auto-fit, minmax(180px, 1fr))'
+               },
+               gap: { xs: 2, sm: 2.5 },
+               alignItems: 'start'
+             }}
+           >
+                                       {/* Minimalist Search Field */}
+              <Box sx={{ gridColumn: { xs: '1', sm: 'span 2', md: 'span 1' } }}>
+                <TextField
+                  placeholder="Search articles..."
+                  value={search}
+                  onChange={handleSearch}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+                        <SearchIcon sx={{ color: 'text.secondary', fontSize: '1rem' }} />
+                      </Box>
+                    ),
+                    endAdornment: search && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setSearch('')}
+                        sx={{ mr: -0.5 }}
+                      >
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    ),
+                  }}
+                  size="small"
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 1,
+                      '&:hover': {
+                        '& .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'primary.main',
+                        },
+                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: 'primary.main',
+                        borderWidth: 1,
+                      },
+                    },
+                  }}
+                />
+                {search && (
+                  <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, ml: 1, display: 'block' }}>
+                    Searching for: "{search}"
+                  </Typography>
+                )}
+              </Box>
+            
+                                       {/* Minimalist Feed Filter */}
+              <FormControl 
+                size="small" 
+                sx={{ 
+                  width: '100%'
+                }}
+              >
+               <InputLabel>Feed Source</InputLabel>
+               <Select
+                 value={selectedFeedId}
+                 label="Feed Source"
+                 onChange={handleFeedFilter}
+                 startAdornment={
+                   <FeedIcon sx={{ mr: 1, color: 'text.secondary', fontSize: '0.9rem' }} />
+                 }
+                 sx={{
+                   borderRadius: 1,
+                   '& .MuiSelect-select': {
+                     display: 'flex',
+                     alignItems: 'center',
+                   },
+                 }}
+               >
+                 <MenuItem value="">
+                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                     <FeedIcon fontSize="small" />
+                     <Typography>All Feeds</Typography>
+                   </Box>
+                 </MenuItem>
+                 {feeds?.map((feed) => (
+                   <MenuItem key={feed.id} value={feed.id}>
+                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                       <FeedIcon fontSize="small" />
+                       <Typography>{feed.title}</Typography>
+                     </Box>
+                   </MenuItem>
+                 ))}
+               </Select>
+             </FormControl>
+
+                           {/* Enhanced Date Filter */}
+              <FormControl 
+                size="small" 
+                sx={{ 
+                  width: '100%'
+                }}
+              >
+                <InputLabel>Date Range</InputLabel>
+                <Select
+                  value={dateFilter}
+                  label="Date Range"
+                  onChange={handleDateFilterChange}
+                  sx={{ borderRadius: 1 }}
+                >
+                  <MenuItem value="all">All Time</MenuItem>
+                  <MenuItem value="today">Today</MenuItem>
+                  <MenuItem value="week">This Week</MenuItem>
+                  <MenuItem value="month">This Month</MenuItem>
+                  <MenuItem value="custom">Custom Range</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Custom Date Range */}
+              {dateFilter === 'custom' && (
+                <Box sx={{ 
+                  gridColumn: { xs: '1', sm: 'span 2' },
+                  display: 'flex',
+                  gap: 1
+                }}>
+                  <TextField
+                    type="date"
+                    value={customDateRange.start}
+                    onChange={handleCustomDateChange('start')}
+                    size="small"
+                    sx={{ borderRadius: 1, flex: 1 }}
+                  />
+                  <TextField
+                    type="date"
+                    value={customDateRange.end}
+                    onChange={handleCustomDateChange('end')}
+                    size="small"
+                    sx={{ borderRadius: 1, flex: 1 }}
+                  />
+                </Box>
+              )}
+
+              {/* Author Filter */}
+              <TextField
+                placeholder="Filter by author..."
+                value={authorFilter}
+                onChange={handleAuthorFilterChange}
+                size="small"
+                fullWidth
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { borderRadius: 1 }
+                }}
+              />
+
+              {/* Analysis Filter */}
+              <FormControl 
+                size="small" 
+                sx={{ 
+                  width: '100%'
+                }}
+              >
+                <InputLabel>Analysis</InputLabel>
+                <Select
+                  value={hasAnalysis}
+                  label="Analysis"
+                  onChange={handleAnalysisFilterChange}
+                  sx={{ borderRadius: 1 }}
+                >
+                  <MenuItem value="all">All Articles</MenuItem>
+                  <MenuItem value="yes">With Analysis</MenuItem>
+                  <MenuItem value="no">Without Analysis</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Sort Options */}
+              <FormControl 
+                size="small" 
+                sx={{ 
+                  width: '100%'
+                }}
+              >
+                <InputLabel>Sort By</InputLabel>
+                <Select
+                  value={sortBy}
+                  label="Sort By"
+                  onChange={handleSortChange}
+                  sx={{ borderRadius: 1 }}
+                >
+                  <MenuItem value="published">Published Date</MenuItem>
+                  <MenuItem value="title">Title</MenuItem>
+                  <MenuItem value="feed">Feed Source</MenuItem>
+                  <MenuItem value="author">Author</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Sort Order Toggle */}
+              <Button
+                variant="outlined"
+                onClick={handleSortOrderChange}
+                size="small"
+                fullWidth
+                sx={{ 
+                  borderRadius: 1,
+                  px: 2
+                }}
+              >
+                {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+              </Button>
+
+              {/* Minimalist Per Page Selector */}
+              <FormControl 
+                size="small" 
+                sx={{ 
+                  width: '100%'
+                }}
+              >
+                <InputLabel>Per Page</InputLabel>
+                <Select
+                  value={limit}
+                  label="Per Page"
+                  onChange={handleLimitChange}
+                  startAdornment={
+                    <Box sx={{ mr: 1, color: 'text.secondary' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                        {limit === -1 ? '∞' : limit}
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{
+                    borderRadius: 1,
+                    '& .MuiSelect-select': {
+                      display: 'flex',
+                      alignItems: 'center',
+                    },
+                  }}
+                >
+                  <MenuItem value={6}>6 articles</MenuItem>
+                  <MenuItem value={12}>12 articles</MenuItem>
+                  <MenuItem value={24}>24 articles</MenuItem>
+                  <MenuItem value={50}>50 articles</MenuItem>
+                  <MenuItem value={100}>100 articles</MenuItem>
+                  <MenuItem value={-1}>Show All</MenuItem>
+                </Select>
+              </FormControl>
+
+                                       {/* Minimalist Action Buttons */}
+              <Box sx={{ 
+                gridColumn: { xs: '1', sm: 'span 2' },
+                display: 'flex',
+                gap: 1,
+                flexDirection: { xs: 'column', sm: 'row' }
+              }}>
+                {/* Clear Filters Button */}
+                <Button
+                  variant="outlined"
+                  startIcon={<ClearIcon />}
+                  onClick={handleClearFilters}
+                  size="small"
+                  sx={{ 
+                    flex: { xs: '1', sm: '0 0 auto' },
+                    borderRadius: 1,
+                    px: { xs: 2, sm: 2.5 }
+                  }}
+                >
+                  Clear All
+                </Button>
+
+                {/* Bulk Delete Button */}
+                {selectedArticles.size > 0 && (
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<BulkDeleteIcon />}
+                    onClick={() => setOpenBulkDeleteDialog(true)}
+                    size="small"
+                    sx={{ 
+                      flex: { xs: '1', sm: '0 0 auto' },
+                      borderRadius: 1,
+                      px: { xs: 2, sm: 2.5 },
+                      '&:hover': {
+                        transform: 'translateY(-1px)',
+                        boxShadow: theme.shadows[2],
+                      },
+                      transition: 'all 0.2s ease-in-out',
+                    }}
+                  >
+                    Delete {selectedArticles.size} Selected
+                  </Button>
+                )}
+              </Box>
+            </Box>
+
+          {/* Quick Stats */}
+          {articlesData?.pagination && (
+            <Box 
+              sx={{ 
+                mt: 2, 
+                pt: 2, 
+                borderTop: `1px solid ${theme.palette.divider}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 1
+              }}
+            >
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Chip 
+                  label={`Page ${page} of ${Math.ceil(articlesData.pagination.total / limit)}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: '0.75rem' }}
+                />
+                <Chip 
+                  label={`${limit === -1 ? 'All' : limit} per page`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: '0.75rem' }}
+                />
+                {selectedFeedId && (
+                  <Chip 
+                    label={`Filtered by feed`}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ fontSize: '0.75rem' }}
+                  />
+                )}
+              </Box>
+              
+              <Typography variant="caption" color="textSecondary">
+                Last updated: {new Date().toLocaleTimeString()}
+              </Typography>
+            </Box>
+          )}
+        </Paper>
+      </Collapse>
 
       {/* Select All Checkbox */}
       {articlesData?.articles && articlesData.articles.length > 0 && limit !== -1 && (
-        <Box mb={2}>
+        <Box 
+          mb={2}
+          sx={{ 
+            display: 'flex',
+            justifyContent: { xs: 'center', sm: 'flex-start' }
+          }}
+        >
           <FormControlLabel
             control={
               <Checkbox
                 checked={isAllSelected}
                 indeterminate={isSomeSelected && !isAllSelected}
                 onChange={(e) => handleSelectAll(e.target.checked)}
+                size={isMobile ? "small" : "medium"}
               />
             }
             label={`Select All (${selectedArticles.size} selected)`}
+            sx={{ 
+              fontSize: { xs: '0.875rem', sm: '1rem' }
+            }}
           />
         </Box>
       )}
@@ -332,82 +846,237 @@ const Articles: React.FC = () => {
       {isLoading && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* Articles Grid */}
-      <Grid container spacing={3}>
-        {articlesData?.articles?.map((article) => (
-          <Grid item xs={12} sm={6} md={4} key={article.id}>
-            <Card>
-              <CardContent>
-                <Box display="flex" alignItems="flex-start" gap={1}>
-                  <Checkbox
-                    checked={selectedArticles.has(article.id!)}
-                    onChange={(e) => handleSelectArticle(article.id!, e.target.checked)}
-                    size="small"
-                  />
-                  <Box flex={1}>
-                    <Typography variant="h6" gutterBottom noWrap>
-                      {article.title}
+      <Grid container spacing={{ xs: 2, sm: 3 }}>
+        {articlesData?.articles?.map((article, index) => (
+          <Grid item xs={12} sm={6} md={4} lg={3} key={article.id}>
+            <Zoom in={true} style={{ transitionDelay: `${index * 100}ms` }}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'all 0.3s ease-in-out',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: theme.shadows[8],
+                  },
+                  borderRadius: 2,
+                  overflow: 'hidden'
+                }}
+              >
+                {/* Card Header with Feed Info */}
+                <CardHeader
+                  avatar={
+                    <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+                      <FeedIcon fontSize="small" />
+                    </Avatar>
+                  }
+                  title={
+                    <Typography 
+                      variant="caption" 
+                      color="textSecondary"
+                      sx={{ 
+                        fontWeight: 500,
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {article.feed_title}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary" gutterBottom>
-                      {article.feed_title} • {format(new Date(article.published_at || ''), 'MMM dd, yyyy')}
+                  }
+                  subheader={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <ScheduleIcon fontSize="small" sx={{ fontSize: '0.75rem' }} />
+                      <Typography variant="caption" color="textSecondary">
+                        {format(new Date(article.published_at || ''), 'MMM dd, yyyy')}
+                      </Typography>
+                    </Box>
+                  }
+                  action={
+                    <Checkbox
+                      checked={selectedArticles.has(article.id!)}
+                      onChange={(e) => handleSelectArticle(article.id!, e.target.checked)}
+                      size="small"
+                      sx={{ mr: -1 }}
+                    />
+                  }
+                  sx={{ 
+                    pb: 1,
+                    '& .MuiCardHeader-content': {
+                      minWidth: 0
+                    }
+                  }}
+                />
+
+                <CardContent sx={{ flex: 1, pt: 0, pb: 2 }}>
+                  {/* Article Title */}
+                  <Typography 
+                    variant="h6" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 600,
+                      lineHeight: 1.3,
+                      mb: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      minHeight: '3.9em'
+                    }}
+                  >
+                    {article.title}
+                  </Typography>
+
+                  {/* Article Summary */}
+                  {article.summary && (
+                    <Typography 
+                      variant="body2" 
+                      color="textSecondary"
+                      sx={{ 
+                        mb: 2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        lineHeight: 1.4,
+                        minHeight: '4.2em'
+                      }}
+                    >
+                      {truncateText(article.summary, 150)}
                     </Typography>
-                    <Typography variant="body2" sx={{ mb: 2 }} noWrap>
-                      {article.summary}
-                    </Typography>
-                    <Box display="flex" gap={1} flexWrap="wrap">
-                      {article.author && (
-                        <Chip label={article.author} size="small" variant="outlined" />
+                  )}
+
+                  {/* Author and Tags */}
+                  <Box sx={{ mb: 2 }}>
+                    {article.author && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                        <PersonIcon fontSize="small" sx={{ fontSize: '0.75rem', color: 'text.secondary' }} />
+                        <Typography variant="caption" color="textSecondary">
+                          {truncateText(article.author, 30)}
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {/* Tags or Categories could go here */}
+                    <Box display="flex" gap={0.5} flexWrap="wrap">
+                      {article.feed_title && (
+                        <Chip 
+                          label={truncateText(article.feed_title, 20)} 
+                          size="small" 
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem' }}
+                        />
                       )}
                     </Box>
                   </Box>
-                </Box>
-              </CardContent>
-              <CardActions>
-                <Tooltip title="Analyze with AI">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleAnalyze(article.id!)}
-                    disabled={analyzeMutation.isLoading}
-                    color={analyzeMutation.isLoading ? "primary" : "default"}
-                  >
-                    {analyzeMutation.isLoading ? (
-                      <Box sx={{ width: 16, height: 16 }}>
-                        <CircularProgress size={16} />
-                      </Box>
-                    ) : (
-                      <AnalysisIcon />
-                    )}
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="View Details">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleOpenArticle(article)}
-                  >
-                    <OpenIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Delete Article">
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleDelete(article.id!)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Tooltip>
-              </CardActions>
-            </Card>
+                </CardContent>
+
+                {/* Card Actions */}
+                <CardActions 
+                  sx={{ 
+                    pt: 0, 
+                    pb: 2, 
+                    px: 2,
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1
+                  }}
+                >
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <Tooltip title="Analyze with AI">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleAnalyze(article.id!)}
+                        disabled={analyzeMutation.isLoading}
+                        color={analyzeMutation.isLoading ? "primary" : "default"}
+                        sx={{ 
+                          bgcolor: 'primary.light',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: 'primary.main',
+                          },
+                          '&:disabled': {
+                            bgcolor: 'primary.light',
+                            color: 'white',
+                          }
+                        }}
+                      >
+                        {analyzeMutation.isLoading ? (
+                          <Box sx={{ width: 16, height: 16 }}>
+                            <CircularProgress size={16} color="inherit" />
+                          </Box>
+                        ) : (
+                          <AnalysisIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    
+                    <Tooltip title="View Details">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenArticle(article)}
+                        sx={{ 
+                          bgcolor: 'secondary.light',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: 'secondary.main',
+                          }
+                        }}
+                      >
+                        <OpenIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+
+                  <Tooltip title="Delete Article">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(article.id!)}
+                      sx={{ 
+                        bgcolor: 'error.light',
+                        color: 'white',
+                        '&:hover': {
+                          bgcolor: 'error.main',
+                        }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </CardActions>
+              </Card>
+            </Zoom>
           </Grid>
         ))}
       </Grid>
 
       {/* Empty State */}
       {articlesData?.articles?.length === 0 && !isLoading && (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h6" color="textSecondary" gutterBottom>
+        <Paper 
+          sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            textAlign: 'center',
+            borderRadius: 2,
+            bgcolor: 'grey.50'
+          }}
+        >
+          <Typography 
+            variant={isMobile ? "h6" : "h5"} 
+            color="textSecondary" 
+            gutterBottom
+          >
             No articles found
           </Typography>
-          <Typography variant="body2" color="textSecondary">
+          <Typography 
+            variant="body2" 
+            color="textSecondary"
+            sx={{ maxWidth: 400, mx: 'auto' }}
+          >
             {search || selectedFeedId ? 'Try adjusting your filters' : 'Articles will appear here once RSS feeds are fetched'}
           </Typography>
         </Paper>
@@ -415,27 +1084,65 @@ const Articles: React.FC = () => {
 
       {/* Pagination */}
       {articlesData?.pagination && limit !== -1 && articlesData.pagination.total > limit && (
-        <Box display="flex" justifyContent="space-between" alignItems="center" mt={3}>
-          <Typography variant="body2" color="textSecondary">
+        <Box 
+          display="flex" 
+          flexDirection={{ xs: 'column', sm: 'row' }}
+          justifyContent="space-between" 
+          alignItems="center" 
+          mt={4}
+          gap={2}
+        >
+          <Typography 
+            variant="body2" 
+            color="textSecondary"
+            sx={{ order: { xs: 2, sm: 1 } }}
+          >
             Page {page} of {Math.ceil(articlesData.pagination.total / limit)}
           </Typography>
+          
           <Pagination
             count={Math.ceil(articlesData.pagination.total / limit)}
             page={page}
             onChange={handlePageChange}
             color="primary"
+            size={isMobile ? "small" : "medium"}
+            sx={{ order: { xs: 1, sm: 2 } }}
           />
-          <Typography variant="body2" color="textSecondary">
+          
+          <Typography 
+            variant="body2" 
+            color="textSecondary"
+            sx={{ order: { xs: 3, sm: 3 } }}
+          >
             {articlesData.pagination.total} total articles
           </Typography>
         </Box>
       )}
 
       {/* Article Detail Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="lg" fullWidth>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="lg" 
+        fullWidth
+        fullScreen={isMobile}
+        TransitionComponent={Fade}
+        transitionDuration={300}
+      >
         <DialogTitle>
           <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6" sx={{ flex: 1, pr: 2 }}>
+            <Typography 
+              variant={isMobile ? "h6" : "h5"} 
+              sx={{ 
+                flex: 1, 
+                pr: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical'
+              }}
+            >
               {selectedArticle?.title}
             </Typography>
             {selectedArticle && (
@@ -445,6 +1152,10 @@ const Articles: React.FC = () => {
                 onClick={() => handleAnalyze(selectedArticle.id!)}
                 disabled={analyzeMutation.isLoading}
                 size="small"
+                sx={{ 
+                  minWidth: 'auto',
+                  flexShrink: 0
+                }}
               >
                 {analyzeMutation.isLoading ? 'Analyzing...' : 'Analyze'}
               </Button>
@@ -459,27 +1170,68 @@ const Articles: React.FC = () => {
           ) : (
             selectedArticle && (
               <Box>
-                {/* Article Metadata */}
-                <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
-                  <Typography variant="body2" color="textSecondary" gutterBottom>
-                    {selectedArticle.feed_title} • {format(new Date(selectedArticle.published_at || ''), 'MMM dd, yyyy HH:mm')}
-                  </Typography>
-                  {selectedArticle.author && (
-                    <Typography variant="body2" color="textSecondary" gutterBottom>
-                      By: {selectedArticle.author}
-                    </Typography>
-                  )}
-                  <Button
-                    variant="outlined"
-                    href={selectedArticle.link}
-                    target="_blank"
-                    startIcon={<OpenIcon />}
-                    size="small"
-                    sx={{ mt: 1 }}
-                  >
-                    Read Original
-                  </Button>
-                </Paper>
+                                 {/* Enhanced Article Header with Media */}
+                 <Box sx={{ mb: 3 }}>
+                   {/* Media Cover Image */}
+                   {selectedArticle.raw_json && (() => {
+                     try {
+                       const rawData = JSON.parse(selectedArticle.raw_json);
+                       const mediaUrl = rawData.enclosure?.url || rawData.image?.url || rawData.media?.content?.[0]?.url ||
+                       rawData["media:content"]?.[0]?.["$"]?.url;
+                       
+                       if (mediaUrl) {
+                         return (
+                           <Box sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', boxShadow: theme.shadows[2] }}>
+                             <CardMedia
+                               component="img"
+                               image={mediaUrl}
+                               alt="Article cover"
+                               sx={{ 
+                                 width: '100%', 
+                                 height: { xs: 200, sm: 300, md: 400 },
+                                 objectFit: 'cover'
+                               }}
+                               onError={(e) => {
+                                 e.currentTarget.style.display = 'none';
+                               }}
+                             />
+                           </Box>
+                         );
+                       }
+                       return null;
+                     } catch {
+                       return null;
+                     }
+                   })()}
+
+                   {/* Article Metadata */}
+                   <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                       <FeedIcon fontSize="small" color="primary" />
+                       <Typography variant="body2" color="textSecondary">
+                         {selectedArticle.feed_title} • {format(new Date(selectedArticle.published_at || ''), 'MMM dd, yyyy HH:mm')}
+                       </Typography>
+                     </Box>
+                     {selectedArticle.author && (
+                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                         <PersonIcon fontSize="small" color="primary" />
+                         <Typography variant="body2" color="textSecondary">
+                           By: {selectedArticle.author}
+                         </Typography>
+                       </Box>
+                     )}
+                     <Button
+                       variant="contained"
+                       href={selectedArticle.link}
+                       target="_blank"
+                       startIcon={<OpenIcon />}
+                       size="small"
+                       sx={{ mt: 1 }}
+                     >
+                       Read Original Article
+                     </Button>
+                   </Paper>
+                 </Box>
 
                 {/* Article Content */}
                 <Box mb={3}>
@@ -489,44 +1241,97 @@ const Articles: React.FC = () => {
                   <Typography variant="body1" paragraph sx={{ fontWeight: 500 }}>
                     {selectedArticle.summary}
                   </Typography>
-                  {selectedArticle.content && selectedArticle.content !== selectedArticle.summary && (
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-                      {selectedArticle.content}
-                    </Typography>
-                  )}
+
                 </Box>
 
-                {/* AI Analysis Results */}
-                {articleDetails?.insights && articleDetails.insights.length > 0 && (
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      AI Analysis Results
-                    </Typography>
-                    {articleDetails.insights.map((insight: any, index: number) => (
-                      <Paper key={index} sx={{ p: 2, mb: 2 }}>
-                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                          <Chip 
-                            label={insight.agent === 'sports_specialist' ? 'Sports Specialist' : insight.agent} 
-                            color="primary" 
-                            size="small" 
-                          />
-                          <Typography variant="caption" color="textSecondary">
-                            {format(new Date(insight.created_at), 'MMM dd, yyyy HH:mm')}
-                          </Typography>
-                        </Box>
-                        
-                        <Typography variant="body2" paragraph>
-                          {insight.summary}
-                        </Typography>
+                                 {/* Enhanced AI Analysis Results */}
+                 {articleDetails?.insights && articleDetails.insights.length > 0 && (
+                   <Box>
+                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                       <AnalysisIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                         AI Analysis Results
+                       </Typography>
+                       <Chip 
+                         label={`${articleDetails.insights.length} insight${articleDetails.insights.length > 1 ? 's' : ''}`}
+                         color="primary"
+                         variant="outlined"
+                         size="small"
+                       />
+                     </Box>
+                     
+                     {articleDetails.insights.map((insight: any, index: number) => (
+                       <Paper 
+                         key={index} 
+                         sx={{ 
+                           p: 3, 
+                           mb: 3, 
+                           borderRadius: 2,
+                           border: `1px solid ${theme.palette.divider}`,
+                           '&:hover': {
+                             boxShadow: theme.shadows[4],
+                             transform: 'translateY(-2px)',
+                           },
+                           transition: 'all 0.3s ease-in-out',
+                           position: 'relative',
+                           '&::before': {
+                             content: '""',
+                             position: 'absolute',
+                             top: 0,
+                             left: 0,
+                             width: '4px',
+                             height: '100%',
+                             bgcolor: 'primary.main',
+                             borderRadius: '2px 0 0 2px',
+                           }
+                         }}
+                       >
+                         <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                             <Chip 
+                               label={insight.agent === 'sports_specialist' ? '🏈 Sports Specialist' : `🤖 ${insight.agent}`}
+                               color="primary" 
+                               size="medium"
+                               sx={{ fontWeight: 600 }}
+                             />
+                             <Chip 
+                               label={`${Math.round((insight.score || 0) * 100)}% confidence`}
+                               color="secondary"
+                               variant="outlined"
+                               size="small"
+                             />
+                           </Box>
+                           <Typography variant="caption" color="textSecondary" sx={{ mt: 1 }}>
+                             {format(new Date(insight.created_at), 'MMM dd, yyyy HH:mm')}
+                           </Typography>
+                         </Box>
+                         
+                         <Typography variant="body1" paragraph sx={{ 
+                           lineHeight: 1.6,
+                           fontSize: '1rem',
+                           color: 'text.primary'
+                         }}>
+                           {insight.summary}
+                         </Typography>
 
                         {/* Tags */}
                         {insight.tags && (
                           <Box mb={2}>
                             <Typography variant="caption" color="textSecondary">Tags:</Typography>
                             <Box display="flex" gap={1} flexWrap="wrap" mt={0.5}>
-                              {JSON.parse(insight.tags || '[]').map((tag: string, tagIndex: number) => (
-                                <Chip key={tagIndex} label={tag} size="small" variant="outlined" />
-                              ))}
+                              {(() => {
+                                try {
+                                  const tags = JSON.parse(insight.tags || '[]');
+                                  if (Array.isArray(tags)) {
+                                    return tags.map((tag: string, tagIndex: number) => (
+                                      <Chip key={tagIndex} label={tag} size="small" variant="outlined" />
+                                    ));
+                                  }
+                                  return null;
+                                } catch {
+                                  return <Typography variant="caption" color="textSecondary">Invalid tags data</Typography>;
+                                }
+                              })()}
                             </Box>
                           </Box>
                         )}
@@ -539,18 +1344,21 @@ const Articles: React.FC = () => {
                               {(() => {
                                 try {
                                   const entities = JSON.parse(insight.entities || '{}');
-                                  return Object.entries(entities).map(([key, values]: [string, any]) => (
-                                    values && values.length > 0 && (
-                                      <Box key={key} display="flex" gap={1} flexWrap="wrap" mb={1}>
-                                        <Typography variant="caption" sx={{ minWidth: 60, textTransform: 'capitalize' }}>
-                                          {key.replace('_', ' ')}:
-                                        </Typography>
-                                        {values.map((value: string, valueIndex: number) => (
-                                          <Chip key={valueIndex} label={value} size="small" color="secondary" variant="outlined" />
-                                        ))}
-                                      </Box>
-                                    )
-                                  ));
+                                  return Object.entries(entities).map(([key, values]: [string, any]) => {
+                                    if (values && Array.isArray(values) && values.length > 0) {
+                                      return (
+                                        <Box key={key} display="flex" gap={1} flexWrap="wrap" mb={1}>
+                                          <Typography variant="caption" sx={{ minWidth: 60, textTransform: 'capitalize' }}>
+                                            {key.replace('_', ' ')}:
+                                          </Typography>
+                                          {values.map((value: string, valueIndex: number) => (
+                                            <Chip key={valueIndex} label={value} size="small" color="secondary" variant="outlined" />
+                                          ))}
+                                        </Box>
+                                      );
+                                    }
+                                    return null;
+                                  });
                                 } catch {
                                   return <Typography variant="caption" color="textSecondary">Invalid entities data</Typography>;
                                 }
@@ -575,17 +1383,97 @@ const Articles: React.FC = () => {
                   </Box>
                 )}
 
-                {/* No Analysis Message */}
-                {(!articleDetails?.insights || articleDetails.insights.length === 0) && (
-                  <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
-                    <Typography variant="body2" color="textSecondary" gutterBottom>
-                      No AI analysis available for this article yet.
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      Click "Analyze" to start AI analysis of this article.
-                    </Typography>
-                  </Paper>
-                )}
+                                 {/* Enhanced No Analysis Message */}
+                 {(!articleDetails?.insights || articleDetails.insights.length === 0) && (
+                   <Paper 
+                     sx={{ 
+                       p: 4, 
+                       textAlign: 'center', 
+                       borderRadius: 2,
+                       background: `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.primary.main} 100%)`,
+                       color: 'white',
+                       position: 'relative',
+                       overflow: 'hidden',
+                       '&::before': {
+                         content: '""',
+                         position: 'absolute',
+                         top: -50,
+                         right: -50,
+                         width: 100,
+                         height: 100,
+                         background: 'rgba(255,255,255,0.1)',
+                         borderRadius: '50%',
+                       },
+                       '&::after': {
+                         content: '""',
+                         position: 'absolute',
+                         bottom: -30,
+                         left: -30,
+                         width: 60,
+                         height: 60,
+                         background: 'rgba(255,255,255,0.1)',
+                         borderRadius: '50%',
+                       }
+                     }}
+                   >
+                     <Box sx={{ position: 'relative', zIndex: 1 }}>
+                       <Box sx={{ mb: 2 }}>
+                         <AnalysisIcon sx={{ fontSize: 60, opacity: 0.8 }} />
+                       </Box>
+                       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                         Ready for AI Analysis
+                       </Typography>
+                       <Typography variant="body2" sx={{ mb: 3, opacity: 0.9 }}>
+                         This article hasn't been analyzed yet. Get instant insights about sports events, players, teams, and more.
+                       </Typography>
+                       
+                       <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+                         <Chip 
+                           label="Sports Events" 
+                           sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} 
+                         />
+                         <Chip 
+                           label="Player Analysis" 
+                           sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} 
+                         />
+                         <Chip 
+                           label="Team Insights" 
+                           sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} 
+                         />
+                         <Chip 
+                           label="Match Predictions" 
+                           sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} 
+                         />
+                       </Box>
+                       
+                       <Button
+                         variant="contained"
+                         startIcon={<AnalysisIcon />}
+                         onClick={() => handleAnalyze(selectedArticle.id!)}
+                         disabled={analyzeMutation.isLoading}
+                         size="large"
+                         sx={{ 
+                           mt: 3,
+                           bgcolor: 'white',
+                           color: 'primary.main',
+                           '&:hover': {
+                             bgcolor: 'grey.100',
+                           },
+                           px: 4,
+                           py: 1.5,
+                           borderRadius: 2,
+                           fontWeight: 600
+                         }}
+                       >
+                         {analyzeMutation.isLoading ? 'Analyzing...' : 'Start AI Analysis'}
+                       </Button>
+                       
+                       <Typography variant="caption" sx={{ display: 'block', mt: 2, opacity: 0.7 }}>
+                         Analysis typically takes 1-3 minutes
+                       </Typography>
+                     </Box>
+                   </Paper>
+                 )}
               </Box>
             )
           )}
@@ -596,7 +1484,13 @@ const Articles: React.FC = () => {
       </Dialog>
 
       {/* Bulk Delete Dialog */}
-      <Dialog open={openBulkDeleteDialog} onClose={() => setOpenBulkDeleteDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={openBulkDeleteDialog} 
+        onClose={() => setOpenBulkDeleteDialog(false)} 
+        maxWidth="sm" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Bulk Delete Articles</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
