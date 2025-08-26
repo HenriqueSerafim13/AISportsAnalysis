@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ApiResponse, Feed, Article, ArticlesResponse, Job } from '../types';
+import { ApiResponse, Feed, Article, ArticlesResponse, Job, ChatRequest, ChatResponse, WebSearchResult } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -28,15 +28,15 @@ export const feedsApi = {
   },
 
   delete: async (id: number): Promise<void> => {
-    await api.delete<ApiResponse>(`/api/feeds/${id}`);
+    await api.delete<ApiResponse<Feed>>(`/api/feeds/${id}`);
   },
 
   fetch: async (id: number): Promise<void> => {
-    await api.post<ApiResponse>(`/api/feeds/${id}/fetch`);
+    await api.post<ApiResponse<Feed>>(`/api/feeds/${id}/fetch`);
   },
 
   fetchAll: async (): Promise<void> => {
-    await api.post<ApiResponse>('/api/feeds/fetch-all');
+    await api.post<ApiResponse<Feed>>('/api/feeds/fetch-all');
   },
 };
 
@@ -72,7 +72,7 @@ export const articlesApi = {
   },
 
   delete: async (id: number): Promise<void> => {
-    await api.delete<ApiResponse>(`/api/articles/${id}`);
+    await api.delete<ApiResponse<Article>>(`/api/articles/${id}`);
   },
 
   bulkDelete: async (params: {
@@ -88,7 +88,7 @@ export const articlesApi = {
   },
 
   getStats: async () => {
-    const response = await api.get<ApiResponse>('/api/articles/stats/overview');
+    const response = await api.get<ApiResponse<any>>('/api/articles/stats/overview');
     return response.data.data;
   },
 };
@@ -119,10 +119,95 @@ export const jobsApi = {
   },
 };
 
+// Chat API
+export const chatApi = {
+  sendMessage: async (request: ChatRequest): Promise<ChatResponse> => {
+    const response = await api.post<ChatResponse>('/api/chat/chat', request);
+    return response.data;
+  },
+
+  sendMessageStream: async (
+    request: ChatRequest,
+    onChunk: (chunk: string) => void,
+    onDone: (conversationId: string, searchResults?: WebSearchResult[], decision?: any) => void,
+    onError: (error: string) => void,
+    onSearchDecision?: (decision: any) => void
+  ): Promise<void> => {
+    // For streaming, we need to use POST with EventSource-like behavior
+    // Since EventSource doesn't support POST, we'll use fetch with streaming
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+              
+              if (data.type === 'chunk') {
+                onChunk(data.content);
+              } else if (data.type === 'search_decision' && onSearchDecision) {
+                onSearchDecision(data.decision);
+              } else if (data.type === 'done') {
+                onDone(data.conversationId, data.searchResults, data.searchDecision);
+                return;
+              } else if (data.type === 'error') {
+                onError(data.error);
+                return;
+              }
+            } catch (error) {
+              console.warn('Failed to parse SSE data:', line);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Streaming error:', error);
+      onError(error instanceof Error ? error.message : 'Connection failed');
+    }
+  },
+
+  getModels: async (): Promise<string[]> => {
+    const response = await api.get<{ models: string[] }>('/api/chat/models');
+    return response.data.models;
+  },
+
+  checkHealth: async (): Promise<boolean> => {
+    const response = await api.get<{ healthy: boolean }>('/api/chat/health');
+    return response.data.healthy;
+  },
+};
+
 // Health check
 export const healthApi = {
   check: async () => {
-    const response = await api.get<ApiResponse>('/health');
+    const response = await api.get<ApiResponse<any>>('/health');
     return response.data;
   },
 };

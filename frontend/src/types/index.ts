@@ -101,3 +101,33 @@ export interface ReasoningAnalysisResult {
   factors: string[];
   recommendation?: string;
 }
+
+// Chat types
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  searchResults?: WebSearchResult[];
+}
+
+export interface WebSearchResult {
+  title: string;
+  snippet: string;
+  url: string;
+  source: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  searchWeb?: boolean;
+  model?: string;
+  systemPrompt?: string;
+  conversationHistory?: ChatMessage[];
+  debug?: boolean;
+}
+
+export interface ChatResponse {
+  response: string;
+  searchResults?: WebSearchResult[];
+  conversationId?: string;
+}

@@ -34,7 +34,7 @@ async function migrateAddLinkTimestampHash() {
       
       const updateStmt = db.prepare("UPDATE articles SET link_timestamp_hash = ? WHERE id = ?");
       
-      for (const article of articles) {
+      for (const article of articles as any[]) {
         const timestamp = article.published_at || article.fetched_at || new Date().toISOString();
         const hash = generateLinkTimestampHash(article.link, timestamp);
         updateStmt.run(hash, article.id);

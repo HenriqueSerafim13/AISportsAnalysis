@@ -1,5 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import { OllamaRequest, OllamaResponse } from '../types';
+import webSearchService, { WebSearchResult } from './webSearch';
 
 export class OllamaService {
   private baseUrl: string;
@@ -133,6 +134,84 @@ export class OllamaService {
     } catch (error) {
       console.error('Ollama health check failed:', error);
       return false;
+    }
+  }
+
+  async generateResponseWithWebSearch(
+    request: OllamaRequest,
+    searchQuery?: string,
+    context?: string
+  ): Promise<{ response: string; searchResults?: WebSearchResult[] }> {
+    try {
+      let searchResults: WebSearchResult[] = [];
+      
+      // If a search query is provided, perform web search first
+      if (searchQuery) {
+        console.log(`Performing web search for: ${searchQuery}`);
+        const searchResponse = await webSearchService.searchWithContext(
+          searchQuery,
+          context || '',
+          5
+        );
+        searchResults = searchResponse.results;
+        
+        // Enhance the prompt with search results
+        const searchContext = searchResults
+          .map(result => `Source: ${result.source}\nTitle: ${result.title}\nContent: ${result.snippet}\nURL: ${result.url}`)
+          .join('\n\n');
+        
+        request.prompt = `${request.prompt}\n\nWeb Search Results:\n${searchContext}\n\nPlease use the above search results to provide an informed response.`;
+      }
+
+      // Generate response using the enhanced prompt
+      const response = await this.generateResponse(request);
+      
+      return {
+        response,
+        searchResults: searchResults.length > 0 ? searchResults : undefined
+      };
+    } catch (error) {
+      console.error('Error in generateResponseWithWebSearch:', error);
+      throw error;
+    }
+  }
+
+  async generateStreamWithWebSearch(
+    request: OllamaRequest,
+    onChunk: (chunk: string, done: boolean) => void,
+    searchQuery?: string,
+    context?: string
+  ): Promise<{ searchResults?: WebSearchResult[] }> {
+    try {
+      let searchResults: WebSearchResult[] = [];
+      
+      // If a search query is provided, perform web search first
+      if (searchQuery) {
+        console.log(`Performing web search for: ${searchQuery}`);
+        const searchResponse = await webSearchService.searchWithContext(
+          searchQuery,
+          context || '',
+          5
+        );
+        searchResults = searchResponse.results;
+        
+        // Enhance the prompt with search results
+        const searchContext = searchResults
+          .map(result => `Source: ${result.source}\nTitle: ${result.title}\nContent: ${result.snippet}\nURL: ${result.url}`)
+          .join('\n\n');
+        
+        request.prompt = `${request.prompt}\n\nWeb Search Results:\n${searchContext}\n\nPlease use the above search results to provide an informed response.`;
+      }
+
+      // Generate streaming response using the enhanced prompt
+      await this.generateStream(request, onChunk);
+      
+      return {
+        searchResults: searchResults.length > 0 ? searchResults : undefined
+      };
+    } catch (error) {
+      console.error('Error in generateStreamWithWebSearch:', error);
+      throw error;
     }
   }
 }

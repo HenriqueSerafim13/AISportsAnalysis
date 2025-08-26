@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Feeds from './pages/Feeds';
 import Articles from './pages/Articles';
 import Analysis from './pages/Analysis';
+import Chat from './pages/Chat';
 import sseService from './services/sse';
 
 const theme = createTheme({
@@ -60,6 +61,7 @@ function App() {
               <Route path="/feeds" element={<Feeds />} />
               <Route path="/articles" element={<Articles />} />
               <Route path="/analysis" element={<Analysis />} />
+              <Route path="/chat" element={<Chat />} />
             </Routes>
           </Layout>
         </Router>

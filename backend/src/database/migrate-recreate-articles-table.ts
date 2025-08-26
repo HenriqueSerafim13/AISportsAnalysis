@@ -79,7 +79,7 @@ async function migrateRecreateArticlesTable() {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
-      for (const article of existingArticles) {
+      for (const article of existingArticles as any[]) {
         const timestamp = article.published_at || article.fetched_at || new Date().toISOString();
         const hash = generateLinkTimestampHash(article.link, timestamp);
         

@@ -22,6 +22,7 @@ import feedRoutes from './routes/feeds';
 import articleRoutes from './routes/articles';
 import analysisRoutes from './routes/analysis';
 import jobRoutes from './routes/jobs';
+import chatRoutes from './routes/chat';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -82,6 +83,7 @@ app.use('/api/feeds', feedRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Background RSS fetching job
 async function fetchAllFeeds() {

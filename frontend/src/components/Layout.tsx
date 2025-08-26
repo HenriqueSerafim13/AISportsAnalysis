@@ -17,6 +17,7 @@ import {
   RssFeed as FeedsIcon,
   Article as ArticlesIcon,
   Psychology as AnalysisIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -27,6 +28,7 @@ const menuItems = [
   { text: 'Feeds', icon: <FeedsIcon />, path: '/feeds' },
   { text: 'Articles', icon: <ArticlesIcon />, path: '/articles' },
   { text: 'Analysis', icon: <AnalysisIcon />, path: '/analysis' },
+  { text: 'Chat', icon: <ChatIcon />, path: '/chat' },
 ];
 
 interface LayoutProps {
